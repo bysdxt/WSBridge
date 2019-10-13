@@ -127,8 +127,6 @@ namespace WSBridge {
             using (var source = new CancellationTokenSource()) {
                 try {
                     var token = source.Token;
-                    //var ServerBuffer = new byte[BufferSize];
-                    //var ClientBuffer = new byte[BufferSize];
                     hClient[index].WaitOne();
                     ClientResponse = ClientResponses[index];
                     ClientWebSocket = ClientWebSockets[index];
@@ -141,30 +139,13 @@ namespace WSBridge {
                     var Responses = new HttpListenerResponse[] { ServerResponse, ClientResponse };
                     var WebSockets = new WebSocket[] { ServerWebSocket, ClientWebSocket };
                     var Buffers = new byte[][] { new byte[BufferSize], new byte[BufferSize] };
-                    //var WaittingReceiveFromServer = ServerWebSocket.ReceiveAsync(new ArraySegment<byte>(ServerBuffer), token);
-                    //var WaittingReceiveFromClient = ClientWebSocket.ReceiveAsync(new ArraySegment<byte>(ClientBuffer), token);
                     var WaittingReceive = new Task<WebSocketReceiveResult>[] {
                         WebSockets[0].ReceiveAsync(new ArraySegment<byte>(Buffers[0]), token),
                         WebSockets[1].ReceiveAsync(new ArraySegment<byte>(Buffers[1]), token)
                     };
                     var Waitting = new Task[] { WaittingReceive[0], WaittingReceive[1] };
-                    for (int src = Task.WaitAny(Waitting, token), dest; !token.IsCancellationRequested; src = Task.WaitAny(Waitting, token)) {
+                    for (int src = Task.WaitAny(Waitting, token), dest; ; src = Task.WaitAny(Waitting, token)) {
                         if (src < 0) return;
-                        //else if (0 == i) {
-                        //    if (WaittingReceiveFromServer == Waitting[0]) {
-                        //        var info = WaittingReceiveFromServer.Result;
-                        //        if (info.CloseStatus is WebSocketCloseStatus webSocketCloseStatus) {
-                        //            ClientWebSocket.CloseAsync(webSocketCloseStatus, info.CloseStatusDescription, CancellationToken.None).Wait(3000);
-                        //            return;
-                        //        }
-                        //        Waitting[0] = ClientWebSocket.SendAsync(new ArraySegment<byte>(ServerBuffer, 0, info.Count), info.MessageType, info.EndOfMessage, token);
-                        //        WaittingReceiveFromServer.Dispose();
-                        //        WaittingReceiveFromServer = null;
-                        //    } else {
-                        //        Waitting[0].Dispose();
-                        //        Waitting[0] = WaittingReceiveFromServer = ServerWebSocket.ReceiveAsync(new ArraySegment<byte>(ServerBuffer), token);
-                        //    }
-                        //} else if (1 == i) {
                         if (0 == src || 1 == src) {
                             dest = src ^ 1;
                             if (WaittingReceive[src] == Waitting[src]) {
