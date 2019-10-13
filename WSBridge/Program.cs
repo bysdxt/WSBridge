@@ -35,8 +35,7 @@ namespace WSBridge {
             }
             try {
                 Console.WriteLine("监听列表：");
-                foreach (var addr in addrs)
-                    Console.WriteLine(addr);
+                foreach (var addr in addrs) Console.WriteLine(addr);
                 httpListener.Start();
                 Console.WriteLine("成功开始监听各入口");
             } catch (Exception e) {
