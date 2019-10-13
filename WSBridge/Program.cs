@@ -85,23 +85,23 @@ namespace WSBridge {
         }
         private static void StartServer(HttpListenerResponse ServerResponse, WebSocket ServerWebSocket, string id) {
             var index = -1;
-            lock (SyncObj) {
-                if (ServerIndex.ContainsKey(id)) {
-                    ServerWebSocket.CloseAsync(WebSocketCloseStatus.InvalidPayloadData, "ID conflict", CancellationToken.None).Wait(3000);
-                    ServerResponse.Close();
-                    return;
-                }
-                if (FreeIndex.Count < 1) {
-                    ServerWebSocket.CloseAsync(WebSocketCloseStatus.InternalServerError, "Too Many", CancellationToken.None).Wait(3000);
-                    ServerResponse.Close();
-                    return;
-                }
-                ServerIndex.Add(id, index = FreeIndex.Pop());
-                ServerResponses[index] = ServerResponse;
-                ServerWebSockets[index] = ServerWebSocket;
-                hClient[index] = new ManualResetEvent(false);
-            }
             try {
+                lock (SyncObj) {
+                    if (ServerIndex.ContainsKey(id)) {
+                        ServerWebSocket.CloseAsync(WebSocketCloseStatus.InvalidPayloadData, "ID conflict", CancellationToken.None).Wait(3000);
+                        ServerResponse.Close();
+                        return;
+                    }
+                    if (FreeIndex.Count < 1) {
+                        ServerWebSocket.CloseAsync(WebSocketCloseStatus.InternalServerError, "Too Many", CancellationToken.None).Wait(3000);
+                        ServerResponse.Close();
+                        return;
+                    }
+                    ServerIndex.Add(id, index = FreeIndex.Pop());
+                    ServerResponses[index] = ServerResponse;
+                    ServerWebSockets[index] = ServerWebSocket;
+                    hClient[index] = new ManualResetEvent(false);
+                }
                 (new Thread(Delegate_RunningServer)).Start(index);
             } catch {
                 if (index >= 0) {
@@ -112,6 +112,7 @@ namespace WSBridge {
                         FreeIndex.Push(index);
                     }
                 }
+                try { ServerResponse.Close(); } catch { }
                 throw;
             }
         }
