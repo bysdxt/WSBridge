@@ -127,7 +127,8 @@ namespace WSBridge {
             using (var source = new CancellationTokenSource()) {
                 try {
                     var token = source.Token;
-                    hClient[index].WaitOne();
+                    while (!hClient[index].WaitOne(1511)) 
+                        if (ServerWebSocket.CloseStatus is WebSocketCloseStatus) return;
                     ClientResponse = ClientResponses[index];
                     ClientWebSocket = ClientWebSockets[index];
                     lock (SyncObj) {
