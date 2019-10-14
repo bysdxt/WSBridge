@@ -102,7 +102,7 @@ namespace WSBridge {
                     ServerWebSockets[index] = ServerWebSocket;
                     hClient[index] = new ManualResetEvent(false);
                 }
-                (new Thread(Delegate_RunningServer)).Start(index);
+                (new Thread(Delegate_RunningServer)).Start((index, id));
             } catch {
                 if (index >= 0) {
                     lock (SyncObj) {
@@ -119,7 +119,8 @@ namespace WSBridge {
         private static readonly ParameterizedThreadStart Delegate_RunningServer = RunningServer;
         private const int BufferSize = 65536;
         private static void RunningServer(object args) {
-            if (!(args is int index)) return;
+            if (!(args is ValueTuple<int, string> param)) return;
+            var (index, id) = param;
             var ServerResponse = ServerResponses[index];
             var ServerWebSocket = ServerWebSockets[index];
             HttpListenerResponse ClientResponse = null;
@@ -127,23 +128,56 @@ namespace WSBridge {
             using (var source = new CancellationTokenSource()) {
                 try {
                     var token = source.Token;
-                    while (!hClient[index].WaitOne(1511)) 
-                        if (ServerWebSocket.CloseStatus is WebSocketCloseStatus) return;
-                    ClientResponse = ClientResponses[index];
-                    ClientWebSocket = ClientWebSockets[index];
-                    lock (SyncObj) {
-                        ClientResponses[index] = ServerResponses[index] = null;
-                        ClientWebSockets[index] = ServerWebSockets[index] = null;
-                        hClient[index] = null;
-                        FreeIndex.Push(index);
-                    }
-                    var Responses = new HttpListenerResponse[] { ServerResponse, ClientResponse };
-                    var WebSockets = new WebSocket[] { ServerWebSocket, ClientWebSocket };
+                    var Responses = new HttpListenerResponse[] { ServerResponse, null };
+                    var WebSockets = new WebSocket[] { ServerWebSocket, null };
                     var Buffers = new byte[][] { new byte[BufferSize], new byte[BufferSize] };
                     var WaittingReceive = new Task<WebSocketReceiveResult>[] {
                         WebSockets[0].ReceiveAsync(new ArraySegment<byte>(Buffers[0]), token),
-                        WebSockets[1].ReceiveAsync(new ArraySegment<byte>(Buffers[1]), token)
+                        null
                     };
+                    {
+                        var h = new WaitHandle[] { hClient[index], ((IAsyncResult)WaittingReceive[0]).AsyncWaitHandle };
+                        if (1 == WaitHandle.WaitAny(h)) {
+                            for (; ; ) {
+                                lock (SyncObj) {
+                                    ClientResponse = ClientResponses[index];
+                                    ClientWebSocket = ClientWebSockets[index];
+                                    if (ClientResponse != null && ClientWebSocket != null) break;
+                                    ClientResponses[index] = ServerResponses[index] = null;
+                                    ClientWebSockets[index] = ServerWebSockets[index] = null;
+                                    ServerIndex.Remove(id);
+                                    FreeIndex.Push(index);
+                                    hClient[index].Close();
+                                    hClient[index] = null;
+                                    var result = WaittingReceive[0].Result;
+                                    var cs = result.CloseStatus;
+                                    if (null != ClientWebSocket) {
+                                        try {
+                                            ClientWebSocket.CloseAsync(
+                                                cs ?? WebSocketCloseStatus.InternalServerError,
+                                                ServerWebSocket.CloseStatusDescription ?? "",
+                                                CancellationToken.None
+                                            ).Wait(3000);
+                                        } catch { }
+                                    }
+                                    if (cs is null) try { ServerWebSocket.CloseAsync(WebSocketCloseStatus.InvalidPayloadData, "No Client Connected", CancellationToken.None); } catch { }
+                                }
+                                h[1].Close();
+                                return;
+                            }
+                        }
+                    }
+                    Responses[1] = ClientResponse = ClientResponses[index];
+                    WebSockets[1] = ClientWebSocket = ClientWebSockets[index];
+                    lock (SyncObj) {
+                        ClientResponses[index] = ServerResponses[index] = null;
+                        ClientWebSockets[index] = ServerWebSockets[index] = null;
+                        ServerIndex.Remove(id);
+                        FreeIndex.Push(index);
+                        hClient[index].Close();
+                        hClient[index] = null;
+                    }
+                    WaittingReceive[1] = WebSockets[1].ReceiveAsync(new ArraySegment<byte>(Buffers[1]), token);
                     var Waitting = new Task[] { WaittingReceive[0], WaittingReceive[1] };
                     for (int src = Task.WaitAny(Waitting, token), dest; ; src = Task.WaitAny(Waitting, token)) {
                         if (src < 0) return;
