@@ -48,7 +48,19 @@ namespace WSBridge {
                     var context = httpListener.GetContext();
                     response = context.Response;
                     var url = context.Request.Url.LocalPath;
-                    if (!url.StartsWith(ServerPrefix) && !url.StartsWith(ClientPrefix)) {
+                    string ID = null;
+                    if (url.StartsWith(ServerPrefix))
+                        ID = url.Substring(ServerPrefix.Length);
+                    else if (url.StartsWith(ClientPrefix)) {
+                        lock (SyncObj) {
+                            if (!ServerIndex.ContainsKey(ID = url.Substring(ClientPrefix.Length))) {
+                                response.StatusCode = 404;
+                                response.StatusDescription = "The Server does Not Exist";
+                                response.Close();
+                                continue;
+                            }
+                        }
+                    } else {
                         response.StatusCode = 400;
                         response.Close();
                         continue;
@@ -57,14 +69,14 @@ namespace WSBridge {
                     if (!ska.Wait(10000))
                         response.Close();
                     else if (url.StartsWith(ServerPrefix))
-                        StartServer(response, ska.Result.WebSocket, url.Substring(ServerPrefix.Length));
+                        StartServer(response, ska.Result.WebSocket, ID);
                     else if (url.StartsWith(ClientPrefix))
-                        StartClient(response, ska.Result.WebSocket, url.Substring(ClientPrefix.Length));
+                        StartClient(response, ska.Result.WebSocket, ID);
                     else
                         response.Close();
                 } catch (Exception e) {
                     echo(e);
-                    if (response != null) try { response.Close(); } catch (Exception e2) { echo(e2); }
+                    if (response != null) try { response.StatusCode = 500; response.Close(); } catch (Exception e2) { echo(e2); }
                     Thread.Sleep(333);
                     GC.Collect();
                 }
