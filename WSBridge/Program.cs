@@ -92,7 +92,7 @@ namespace WSBridge {
         private static readonly Stack<int> FreeIndex = new Stack<int>(Range(mSaved));
         private static int[] Range(int n) {
             var result = new int[n];
-            for (var i = 0; i < n; ++n) result[i] = i;
+            for (var i = 0; i < n; ++i) result[i] = i;
             return result;
         }
         private static void StartServer(HttpListenerResponse ServerResponse, WebSocket ServerWebSocket, string id) {
