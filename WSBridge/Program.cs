@@ -7,11 +7,16 @@ using System.Threading.Tasks;
 
 namespace WSBridge {
     internal class Program {
+        private static string ExceptionMessages(Exception e) {
+            var s = "";
+            for (; e != null; e = e.InnerException) s += e.Message + ' ';
+            return s;
+        }
         private const string ServerPrefix = "/WSBridge/Listener/";
         private const string ClientPrefix = "/WSBridge/Connect/";
         private static readonly object SyncObj = new object();
         private static readonly object _EchoExceptionSyncObj = new object();
-        private static void echo(Exception e) { lock (_EchoExceptionSyncObj) Console.WriteLine(e); }
+        private static void echo(Exception e) { lock (_EchoExceptionSyncObj) Console.WriteLine($"Error:{ExceptionMessages(e)}\n{e}"); }
         private static void Main(string[] args) {
             var httpListener = new HttpListener();
             var addrs = httpListener.Prefixes;
@@ -49,9 +54,16 @@ namespace WSBridge {
                     response = context.Response;
                     var url = context.Request.Url.LocalPath;
                     string ID = null;
-                    if (url.StartsWith(ServerPrefix))
-                        ID = url.Substring(ServerPrefix.Length);
-                    else if (url.StartsWith(ClientPrefix)) {
+                    if (url.StartsWith(ServerPrefix)) {
+                        lock (SyncObj) {
+                            if (ServerIndex.ContainsKey(ID = url.Substring(ServerPrefix.Length))) {
+                                response.StatusCode = 409;
+                                response.StatusDescription = "ID conflict";
+                                response.Close();
+                                continue;
+                            }
+                        }
+                    } else if (url.StartsWith(ClientPrefix)) {
                         lock (SyncObj) {
                             if (!ServerIndex.ContainsKey(ID = url.Substring(ClientPrefix.Length))) {
                                 response.StatusCode = 404;
